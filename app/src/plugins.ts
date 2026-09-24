@@ -111,6 +111,8 @@ export async function setPluginEnabled(id: string, enabled: boolean, options: { 
 }
 function settingDefs(pluginId: string): PluginSettingSource[] {
   if (pluginId === "discovery") return DISCOVERY_SETTINGS;
+  if (pluginId === "related") return RELATED_SETTINGS;
+  if (pluginId === "search-suggest") return SEARCH_SUGGEST_SETTINGS;
   if (pluginId === "social") return SOCIAL_SETTINGS;
   if (pluginId === "tubearchivist") return TUBE_ARCHIVIST_SETTINGS;
   if (pluginId === "notifications") return NOTIFICATION_PROVIDER_SETTINGS;
