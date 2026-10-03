@@ -125,10 +125,25 @@ db.prepare("INSERT INTO downloads(video_id, status, source) VALUES(?, 'done', 'm
 db.prepare("INSERT INTO download_owners(user_id, video_id, source) VALUES(?, ?, 'manual')").run(downloadsChild.id, "rec-fresh-b");
 const downloadsOnlyAfter = await (await request(downloadsChild.id, "/recommendations?limit=60")).json() as any;
 const recommendationStateRows = (db.prepare("SELECT count(*) AS count FROM discovery_recommendations").get() as { count: number }).count;
+// Outside the library: YouTube's stored panels for what was watched.
+await setPluginEnabled("related", true);
+const panel = (videoId: string, userId: number, ids: string[]) => db.prepare("INSERT INTO video_related(video_id, user_id, payload) VALUES(?, ?, ?)")
+  .run(videoId, userId, JSON.stringify({ source: "video", videos: ids.map((id) => ({ videoId: id, title: id, thumbnail: "t.jpg", duration: "1:00", channelId: null, channelTitle: "", channelAvatar: null, viewCount: null, published: null })) }));
+panel("rec-seed", primaryId, ["yt-once", "yt-twice", "rec-partial", "yt-watched", full.videos[0].video_id]);
+panel("rec-partial", primaryId, ["yt-twice"]);
+panel("rec-other-profile", secondary.id, ["yt-other-profile"]);
+db.prepare("INSERT INTO videos(video_id, channel_id, title, thumbnail, published_at) VALUES('yt-watched', 'UC-rec-a', 'w', 'w.jpg', datetime('now'))").run();
+db.prepare("INSERT INTO user_videos(user_id, video_id, watched) VALUES(?, 'yt-watched', 1)").run(primaryId);
+const withPanels = await (await request(primaryId, "/recommendations?limit=60")).json() as any;
+const childWithPanels = await (await request(child.id, "/recommendations?limit=60")).json() as any;
+await setPluginEnabled("related", false);
 await setPluginEnabled("discovery", false);
 const disabled = await (await request(primaryId, "/recommendations?limit=60")).json() as any;
 
 console.log("RESULT " + JSON.stringify({
+  suggestedIds: withPanels.suggested.map((item: any) => item.videoId),
+  suggestedBeforeIds: (full.suggested ?? []).map((item: any) => item.videoId),
+  childSuggested: childWithPanels.suggested ?? [],
   enabledByDefault,
   fullStatus: fullResponse.status,
   ids: full.videos.map((item: any) => item.video_id),

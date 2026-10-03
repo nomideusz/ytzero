@@ -57,6 +57,13 @@ describe("recommendations route", () => {
     expect(result.feedIds).toContain("rec-external-followed");
   });
 
+  test("suggests from stored YouTube panels, ranked by agreement", () => {
+    expect(result.suggestedBeforeIds).toEqual([]);
+    // Twice-offered first; watched, source videos, grid videos and other profiles' panels left out.
+    expect(result.suggestedIds).toEqual(["yt-twice", "yt-once"]);
+    expect(result.childSuggested).toEqual([]);
+  });
+
   test("returns no recommendations while the plugin is disabled", () => {
     expect(result.disabledEnabled).toBe(false);
     expect(result.disabledIds).toEqual([]);

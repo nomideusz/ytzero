@@ -92,3 +92,7 @@
 @media (max-width: 420px) {
   .recommendations-inline-error .ui-alert__copy > div { align-items: flex-start; flex-direction: column; }
 }
+
+.recommendations-suggested { margin-bottom: 28px; }
+.recommendations-suggested h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
+.recommendations-suggested__origin { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 8px; }

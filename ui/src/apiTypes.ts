@@ -641,6 +641,10 @@ export interface RecommendationSummary {
 
 export interface RecommendationsResponse {
   videos: Video[];
+  /** YouTube's panels for recently watched videos, outside the library (page 0 only). */
+  suggested?: SearchResult[];
+  downloads_allowed?: boolean;
+  downloads_enabled?: boolean;
   page: number;
   limit: number;
   has_more: boolean;

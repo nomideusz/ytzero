@@ -78,10 +78,15 @@ api.get("/recommendations", async (c) => {
     videos = ids.map((id) => byId.get(id)).filter((video): video is (typeof tagged)[number] => Boolean(video));
   }
 
+  const suggested = page === 0 ? await suggestedFromWatched(uid, new Set(ids)) : [];
+  const downloadsAllowed = suggested.length > 0 && !await isChildUser(uid);
   return c.json({
     enabled: data.enabled,
     external_enabled: data.external_enabled,
     videos,
+    suggested,
+    downloads_allowed: downloadsAllowed,
+    downloads_enabled: downloadsAllowed && await profileDownloadsEnabled(uid),
     page: data.page,
     limit: data.limit,
     has_more: data.has_more,
@@ -484,6 +489,45 @@ async function suggestedVideos(uid: number, videoId: string, fetchMissing = fals
   return attachLibraryState(uid, await attachWatchedState(uid, chosen, (video) => video.videoId));
 }
 
+
+// Recommendations from beyond the library: the YouTube panels already stored
+// for what this profile watched most recently. Nothing is fetched here. A
+// video several of those panels agree on ranks above one only a single panel
+// offered; anything watched, dismissed or already in the grid is left out.
+async function suggestedFromWatched(uid: number, shown: ReadonlySet<string>, limit = 24) {
+  if (!pluginEnabled("related") || childLocalOnly(uid)) return [];
+  const { settings } = await getPluginSettings(uid, "related");
+  if (Number(settings.related_count ?? 15) <= 0) return [];
+  const rows = await database.prepare(
+    `SELECT vr.video_id, vr.payload FROM video_related vr
+     JOIN (SELECT video_id, MAX(watched_at) AS watched_at FROM history WHERE user_id = ? GROUP BY video_id) h
+       ON h.video_id = vr.video_id
+     WHERE vr.user_id = ?
+     ORDER BY h.watched_at DESC LIMIT 30`
+  ).all(uid, uid) as { video_id: string; payload: string }[];
+  const sources = new Set(rows.map((row) => row.video_id));
+  const tally = new Map<string, { video: RelatedVideo; votes: number; order: number }>();
+  for (const row of rows) {
+    let videos: RelatedVideo[] = [];
+    try {
+      const parsed = JSON.parse(row.payload);
+      videos = Array.isArray(parsed?.videos) ? parsed.videos : [];
+    } catch { continue; }
+    for (const video of videos) {
+      if (!video?.videoId || sources.has(video.videoId) || shown.has(video.videoId)) continue;
+      const hit = tally.get(video.videoId);
+      if (hit) hit.votes++;
+      else tally.set(video.videoId, { video, votes: 1, order: tally.size });
+    }
+  }
+  const ranked = [...tally.values()].sort((a, b) => b.votes - a.votes || a.order - b.order).map((entry) => entry.video);
+  if (ranked.length === 0) return [];
+  const ids = ranked.map((video) => video.videoId);
+  const watched = new Set((await attachWatchedState(uid, ranked, (video) => video.videoId)).filter((video) => video.watched === 1).map((video) => video.videoId));
+  const dismissed = await dismissedFromPanel(uid, ids);
+  const chosen = ranked.filter((video) => !watched.has(video.videoId) && !dismissed.has(video.videoId)).slice(0, limit);
+  return attachLibraryState(uid, await attachWatchedState(uid, chosen, (video) => video.videoId));
+}
 
 api.get("/videos/:id", async (c) => {
   const uid = currentUserId(c);

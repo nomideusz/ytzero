@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CirclePlay,
@@ -21,6 +22,7 @@ import { useI18n } from "../i18n";
 import { useDocumentTitle } from "../useDocumentTitle";
 import { readGridSize, type GridSize } from "../gridSize";
 import { mergeRecommendationVideos, prepareRecommendationVideos } from "./recommendationsPageLogic";
+import { withSuggestions } from "../relatedPanel";
 import type { PlayVideo, PlaybackQueueContext } from "../playbackQueue";
 
 const PAGE_SIZE = 40;
@@ -39,6 +41,8 @@ export default function RecommendationsPage({ onPlay, loadRecommendations }: Rec
   const title = t("recommendationsTitle");
   useDocumentTitle(title);
   const [videos, setVideos] = useState<Video[]>([]);
+  const [suggested, setSuggested] = useState<Video[]>([]);
+  const navigate = useNavigate();
   const [summary, setSummary] = useState<RecommendationSummary | null>(null);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -78,6 +82,7 @@ export default function RecommendationsPage({ onPlay, loadRecommendations }: Rec
       if (generation !== requestGenerationRef.current) return;
       const eligible = prepareRecommendationVideos(result.videos);
       setVideos((current) => mode === "append" ? mergeRecommendationVideos(current, eligible) : eligible);
+      if (mode !== "append") setSuggested(withSuggestions([], result.suggested, { allowed: result.downloads_allowed, enabled: result.downloads_enabled }));
       setSummary(result.summary);
       setPage(result.page);
       setHasMore(result.has_more);
@@ -173,6 +178,20 @@ export default function RecommendationsPage({ onPlay, loadRecommendations }: Rec
         </Alert>
       )}
 
+      {suggested.length > 0 && (
+        <section className="recommendations-suggested">
+          <h2>{t("moreLikeThis")} <span className="recommendations-suggested__origin">{t("relatedFromYoutube")}</span></h2>
+          <div className={`video-grid video-grid--${gridSize}`}>
+            {suggested.map((video) => (
+              // Not in the library yet: the watch page imports it, as from the related panel.
+              <VideoCard key={video.video_id} video={video} onPlay={(item) => navigate(`/watch/${item.video_id}`)}
+                onChanged={() => setSuggested((current) => current.filter((item) => item.video_id !== video.video_id))}
+                inLibrary={false} processing={false} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {loading && videos.length === 0 ? (
         <VideoGridSkeleton gridSize={gridSize} />
       ) : error && videos.length === 0 ? (
@@ -182,7 +201,7 @@ export default function RecommendationsPage({ onPlay, loadRecommendations }: Rec
           description={t("recommendationsLoadErrorDescription")}
           action={<Button onClick={refresh}>{t("refresh")}</Button>}
         />
-      ) : videos.length === 0 ? (
+      ) : videos.length === 0 && suggested.length === 0 ? (
         <EmptyState
           art={<EmptyArt scene="noDiscovery" />}
           title={t("recommendationsEmptyTitle")}
